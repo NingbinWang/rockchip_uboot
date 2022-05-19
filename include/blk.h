@@ -8,6 +8,8 @@
 #ifndef BLK_H
 #define BLK_H
 
+#include <efi.h>
+
 #ifdef CONFIG_SYS_64BIT_LBA
 typedef uint64_t lbaint_t;
 #define LBAFlength "ll"
@@ -32,13 +34,33 @@ enum if_type {
 	IF_TYPE_HOST,
 	IF_TYPE_SYSTEMACE,
 	IF_TYPE_NVME,
-
+	IF_TYPE_RKNAND,
+	IF_TYPE_SPINAND,
+	IF_TYPE_SPINOR,
+	IF_TYPE_RAMDISK,
+	IF_TYPE_MTD,
 	IF_TYPE_COUNT,			/* Number of interface types */
 };
+
+/* define mtd device devnum */
+#define BLK_MTD_NAND		0
+#define BLK_MTD_SPI_NAND	1
+#define BLK_MTD_SPI_NOR		2
 
 #define BLK_VEN_SIZE		40
 #define BLK_PRD_SIZE		20
 #define BLK_REV_SIZE		8
+
+/*
+ * Identifies the partition table type (ie. MBR vs GPT GUID) signature
+ */
+enum sig_type {
+	SIG_TYPE_NONE,
+	SIG_TYPE_MBR,
+	SIG_TYPE_GUID,
+
+	SIG_TYPE_COUNT			/* Number of signature types */
+};
 
 /*
  * With driver model (CONFIG_BLK) this is uclass platform data, accessible
@@ -67,6 +89,11 @@ struct blk_desc {
 	char		vendor[BLK_VEN_SIZE + 1]; /* device vendor string */
 	char		product[BLK_PRD_SIZE + 1]; /* device product number */
 	char		revision[BLK_REV_SIZE + 1]; /* firmware revision */
+	enum sig_type	sig_type;	/* Partition table signature type */
+	union {
+		uint32_t mbr_sig;	/* MBR integer signature */
+		efi_guid_t guid_sig;	/* GPT GUID Signature */
+	};
 #if CONFIG_IS_ENABLED(BLK)
 	/*
 	 * For now we have a few functions which take struct blk_desc as a
@@ -198,6 +225,20 @@ struct blk_ops {
 			      lbaint_t blkcnt, void *buffer);
 
 	/**
+	 * read_prepare() - read from a block device
+	 *
+	 * @dev:	Device to read from
+	 * @start:	Start block number to read (0=first)
+	 * @blkcnt:	Number of blocks to read
+	 * @buffer:	Destination buffer for data read
+	 * @return number of blocks read, or -ve error number (see the
+	 * IS_ERR_VALUE() macro
+	 */
+#ifdef CONFIG_SPL_BLK_READ_PREPARE
+	unsigned long (*read_prepare)(struct udevice *dev, lbaint_t start,
+				      lbaint_t blkcnt, void *buffer);
+#endif
+	/**
 	 * write() - write to a block device
 	 *
 	 * @dev:	Device to write to
@@ -252,6 +293,10 @@ struct blk_ops {
  */
 unsigned long blk_dread(struct blk_desc *block_dev, lbaint_t start,
 			lbaint_t blkcnt, void *buffer);
+#ifdef CONFIG_SPL_BLK_READ_PREPARE
+unsigned long blk_dread_prepare(struct blk_desc *block_dev, lbaint_t start,
+				lbaint_t blkcnt, void *buffer);
+#endif
 unsigned long blk_dwrite(struct blk_desc *block_dev, lbaint_t start,
 			 lbaint_t blkcnt, const void *buffer);
 unsigned long blk_derase(struct blk_desc *block_dev, lbaint_t start,
@@ -647,5 +692,13 @@ const char *blk_get_if_type_name(enum if_type if_type);
  */
 int blk_common_cmd(int argc, char * const argv[], enum if_type if_type,
 		   int *cur_devnump);
+
+/**
+ * if_typename_to_iftype() - get iftype according to iftype name
+ *
+ * @if_typename: iftype name
+ * @return iftype index
+ */
+enum if_type if_typename_to_iftype(const char *if_typename);
 
 #endif

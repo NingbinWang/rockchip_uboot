@@ -37,6 +37,10 @@
 	gpios = <&gpio7 0 GPIO_ACTIVE_LOW>;
 };
 
+&route_hdmi {
+	status = "okay";
+};
+
 &pinctrl {
 	u-boot,dm-pre-reloc;
 	act8846 {
@@ -75,10 +79,21 @@
 	u-boot,dm-pre-reloc;
 };
 
+&emmc {
+	u-boot,dm-pre-reloc;
+};
+
 &gpio3 {
 	u-boot,dm-pre-reloc;
 };
 
+&gpio7 {
+	u-boot,dm-pre-reloc;
+};
 &gpio8 {
 	u-boot,dm-pre-reloc;
+};
+
+&vcc_sd {
+       u-boot,dm-pre-reloc;
 };

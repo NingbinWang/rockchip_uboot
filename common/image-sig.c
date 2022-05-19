@@ -10,6 +10,7 @@
 #else
 #include <common.h>
 #include <malloc.h>
+#include <optee_include/OpteeClientInterface.h>
 DECLARE_GLOBAL_DATA_PTR;
 #endif /* !USE_HOSTCC*/
 #include <image.h>
@@ -32,42 +33,42 @@ void *image_get_host_blob(void)
 
 struct checksum_algo checksum_algos[] = {
 	{
-		"sha1",
-		SHA1_SUM_LEN,
-		SHA1_DER_LEN,
-		sha1_der_prefix,
+		.name = "sha1",
+		.checksum_len = SHA1_SUM_LEN,
+		.der_len = SHA1_DER_LEN,
+		.der_prefix = sha1_der_prefix,
 #if IMAGE_ENABLE_SIGN
-		EVP_sha1,
+		.calculate_sign = EVP_sha1,
 #endif
-		hash_calculate,
+		.calculate = hash_calculate,
 	},
 	{
-		"sha256",
-		SHA256_SUM_LEN,
-		SHA256_DER_LEN,
-		sha256_der_prefix,
+		.name = "sha256",
+		.checksum_len = SHA256_SUM_LEN,
+		.der_len = SHA256_DER_LEN,
+		.der_prefix = sha256_der_prefix,
 #if IMAGE_ENABLE_SIGN
-		EVP_sha256,
+		.calculate_sign = EVP_sha256,
 #endif
-		hash_calculate,
+		.calculate = hash_calculate,
 	}
 
 };
 
 struct crypto_algo crypto_algos[] = {
 	{
-		"rsa2048",
-		RSA2048_BYTES,
-		rsa_sign,
-		rsa_add_verify_data,
-		rsa_verify,
+		.name = "rsa2048",
+		.key_len = RSA2048_BYTES,
+		.sign = rsa_sign,
+		.add_verify_data = rsa_add_verify_data,
+		.verify = rsa_verify,
 	},
 	{
-		"rsa4096",
-		RSA4096_BYTES,
-		rsa_sign,
-		rsa_add_verify_data,
-		rsa_verify,
+		.name = "rsa4096",
+		.key_len = RSA4096_BYTES,
+		.sign = rsa_sign,
+		.add_verify_data = rsa_add_verify_data,
+		.verify = rsa_verify,
 	}
 
 };
@@ -242,7 +243,8 @@ static int fit_image_verify_sig(const void *fit, int image_noffset,
 		goto error;
 	}
 
-	return verified ? 0 : -EPERM;
+	if (verified)
+		return 0;
 
 error:
 	printf(" error!\n%s for '%s' hash node in '%s' image node\n",
@@ -263,9 +265,8 @@ int fit_image_verify_required_sigs(const void *fit, int image_noffset,
 	*no_sigsp = 1;
 	sig_node = fdt_subnode_offset(sig_blob, 0, FIT_SIG_NODENAME);
 	if (sig_node < 0) {
-		debug("%s: No signature node found: %s\n", __func__,
-		      fdt_strerror(sig_node));
-		return 0;
+		printf("No RSA key found\n");
+		return -EINVAL;
 	}
 
 	fdt_for_each_subnode(noffset, sig_blob, sig_node) {
@@ -423,7 +424,8 @@ static int fit_config_verify_sig(const void *fit, int conf_noffset,
 		goto error;
 	}
 
-	return verified ? 0 : -EPERM;
+	if (verified)
+		return 0;
 
 error:
 	printf(" error!\n%s for '%s' hash node in '%s' config node\n",
@@ -441,9 +443,8 @@ int fit_config_verify_required_sigs(const void *fit, int conf_noffset,
 	/* Work out what we need to verify */
 	sig_node = fdt_subnode_offset(sig_blob, 0, FIT_SIG_NODENAME);
 	if (sig_node < 0) {
-		debug("%s: No signature node found: %s\n", __func__,
-		      fdt_strerror(sig_node));
-		return 0;
+		printf("No RSA key found\n");
+		return -EINVAL;
 	}
 
 	fdt_for_each_subnode(noffset, sig_blob, sig_node) {
@@ -470,3 +471,16 @@ int fit_config_verify(const void *fit, int conf_noffset)
 	return fit_config_verify_required_sigs(fit, conf_noffset,
 					       gd_fdt_blob());
 }
+
+#ifndef USE_HOSTCC
+#if CONFIG_IS_ENABLED(FIT_ROLLBACK_PROTECT)
+__weak int fit_rollback_index_verify(const void *fit, uint32_t rollback_fd,
+				     uint32_t *this_index, uint32_t *min_index)
+{
+	*this_index = 0;
+	*min_index = 0;
+
+	return 0;
+}
+#endif
+#endif

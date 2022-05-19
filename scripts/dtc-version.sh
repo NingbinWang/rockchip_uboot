@@ -2,8 +2,8 @@
 #
 # dtc-version dtc-command
 #
-# Prints the dtc version of `dtc-command' in a canonical 4-digit form
-# such as `0222' for binutils 2.22
+# Prints the dtc version of `dtc-command' in a canonical 6-digit form
+# such as `010404'  for dtc 1.4.4
 #
 
 dtc="$*"

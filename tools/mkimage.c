@@ -144,7 +144,7 @@ static void process_args(int argc, char **argv)
 	int opt;
 
 	while ((opt = getopt(argc, argv,
-			     "a:A:b:c:C:d:D:e:Ef:Fk:i:K:ln:N:p:O:rR:qsT:vVx")) != -1) {
+			     "a:A:b:c:C:d:D:e:Ef:Fk:i:K:ln:N:p:O:rR:qsT:vVxX:")) != -1) {
 		switch (opt) {
 		case 'a':
 			params.addr = strtoull(optarg, &ptr, 16);
@@ -278,6 +278,9 @@ static void process_args(int argc, char **argv)
 			exit(EXIT_SUCCESS);
 		case 'x':
 			params.xflag++;
+			break;
+		case 'X':
+			params.extraparams = optarg;
 			break;
 		default:
 			usage("Invalid option");
@@ -416,7 +419,8 @@ int main(int argc, char **argv)
 		exit (retval);
 	}
 
-	if ((params.type != IH_TYPE_MULTI) && (params.type != IH_TYPE_SCRIPT)) {
+	if ((params.type != IH_TYPE_MULTI) && (params.type != IH_TYPE_SCRIPT) &&
+	    (params.type != IH_TYPE_RKNAND)) {
 		dfd = open(params.datafile, O_RDONLY | O_BINARY);
 		if (dfd < 0) {
 			fprintf(stderr, "%s: Can't open %s: %s\n",
@@ -475,7 +479,7 @@ int main(int argc, char **argv)
 					}
 					size = cpu_to_uimage (sbuf.st_size);
 				} else {
-					size = 0;
+					size = IMAGE_PARAM_INVAL;
 				}
 
 				if (write(ifd, (char *)&size, sizeof(size)) != sizeof(size)) {
@@ -514,6 +518,15 @@ int main(int argc, char **argv)
 		} else if (params.type == IH_TYPE_PBLIMAGE) {
 			/* PBL has special Image format, implements its' own */
 			pbl_load_uboot(ifd, &params);
+		} else if ((params.type == IH_TYPE_RKSD) ||
+				(params.type == IH_TYPE_RKSPI) ||
+				(params.type == IH_TYPE_RKNAND)) {
+			/* Rockchip has special Image format */
+			int ret;
+
+			ret = rockchip_copy_image(ifd, &params);
+			if (ret)
+				return ret;
 		} else {
 			copy_file(ifd, params.datafile, pad_len);
 		}
@@ -644,6 +657,11 @@ copy_file (int ifd, const char *datafile, int pad)
 		fprintf (stderr, "%s: Can't stat %s: %s\n",
 			params.cmdname, datafile, strerror(errno));
 		exit (EXIT_FAILURE);
+	}
+
+	if (sbuf.st_size == 0) {
+		(void) close (dfd);
+		return;
 	}
 
 	ptr = mmap(0, sbuf.st_size, PROT_READ, MAP_SHARED, dfd, 0);
